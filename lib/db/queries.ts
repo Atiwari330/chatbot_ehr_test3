@@ -11,6 +11,7 @@ import {
   inArray,
   lt,
   type SQL,
+  type SQLWrapper,
 } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -27,7 +28,13 @@ import {
   type DBMessage,
   type Chat,
   stream,
+  client,
+  transcript,
 } from './schema';
+import type {
+  Client,
+  Transcript,
+} from './types';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
 import { generateHashedPassword } from './utils';
@@ -38,8 +45,8 @@ import type { VisibilityType } from '@/components/visibility-selector';
 // https://authjs.dev/reference/adapter/drizzle
 
 // biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
-const db = drizzle(client);
+const sql = postgres(process.env.POSTGRES_URL!);
+const db = drizzle(sql);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
@@ -496,16 +503,148 @@ export async function createStreamId({
 
 export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
   try {
-    const streamIds = await db
-      .select({ id: stream.id })
-      .from(stream)
-      .where(eq(stream.chatId, chatId))
-      .orderBy(desc(stream.createdAt))
-      .execute();
-
-    return streamIds.map(({ id }) => id);
+    return await db.select().from(stream).where(eq(stream.chatId, chatId));
   } catch (error) {
     console.error('Failed to get stream ids by chat id from database');
     throw error;
   }
 }
+
+// --- EHR Query Functions ---
+
+/**
+ * Creates a new client record associated with a user.
+ * @returns The newly created client object.
+ */
+export async function createClient(
+  clientData: Omit<Client, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<Client> {
+  try {
+    const result = await db.insert(client).values(clientData).returning();
+    return result[0]!;
+  } catch (error) {
+    console.error('Failed to create client:', error);
+    throw new Error('Database error during client creation.');
+  }
+}
+
+/**
+ * Retrieves a specific client by their ID, ensuring they belong to the specified user.
+ * @returns The client object or undefined if not found or not owned by the user.
+ */
+export async function getClientById(
+  id: string,
+  userId: string,
+): Promise<Client | undefined> {
+  try {
+    const result = await db
+      .select()
+      .from(client)
+      .where(and(eq(client.id, id), eq(client.userId, userId)));
+    return result[0]; // Returns the single client or undefined
+  } catch (error) {
+    console.error('Failed to get client by ID:', error);
+    throw new Error('Database error retrieving client.');
+  }
+}
+
+/**
+ * Retrieves all clients associated with a specific user ID.
+ * @returns An array of client objects.
+ */
+export async function getClientsByUserId(userId: string): Promise<Client[]> {
+  try {
+    return await db.select().from(client).where(eq(client.userId, userId));
+  } catch (error) {
+    console.error('Failed to get clients by user ID:', error);
+    throw new Error('Database error retrieving clients.');
+  }
+}
+
+/**
+ * Updates an existing client record, ensuring the user has permission.
+ * @returns The updated client object.
+ */
+export async function updateClient(
+  id: string,
+  userId: string,
+  updates: Partial<Omit<Client, 'id' | 'userId' | 'createdAt'>>,
+): Promise<Client> {
+  try {
+    const existingClient = await getClientById(id, userId);
+    if (!existingClient) {
+      throw new Error('Client not found or user does not have permission.');
+    }
+
+    const result = await db
+      .update(client)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(client.id, id))
+      .returning();
+    return result[0]!;
+  } catch (error) {
+    console.error('Failed to update client:', error);
+    // Re-throw specific permission error or generic database error
+    if (error instanceof Error && error.message.includes('permission')) {
+        throw error;
+    }
+    throw new Error('Database error during client update.');
+  }
+}
+
+/**
+ * Adds a new transcript record for a specific client.
+ * @returns The newly created transcript object.
+ */
+export async function addTranscript(
+  transcriptData: Omit<Transcript, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<Transcript> {
+  // Note: Assumes clientId provided is valid and accessible by the user context
+  // calling this function. Direct user scoping isn't applied here, relies on caller context.
+  try {
+    const result = await db.insert(transcript).values(transcriptData).returning();
+    return result[0]!;
+  } catch (error) {
+    console.error('Failed to add transcript:', error);
+    throw new Error('Database error adding transcript.');
+  }
+}
+
+/**
+ * Retrieves all transcripts for a specific client ID, ordered by session date/time.
+ * @returns An array of transcript objects.
+ */
+export async function getTranscriptsByClientId(
+  clientId: string,
+): Promise<Transcript[]> {
+  // Note: Assumes clientId is valid and accessed within appropriate user context.
+  try {
+    return await db
+      .select()
+      .from(transcript)
+      .where(eq(transcript.clientId, clientId))
+      .orderBy(desc(transcript.sessionDateTime)); // Show most recent first
+  } catch (error) {
+    console.error('Failed to get transcripts by client ID:', error);
+    throw new Error('Database error retrieving transcripts.');
+  }
+}
+
+/**
+ * Retrieves a single transcript by its unique ID.
+ * @returns The transcript object or undefined if not found.
+ */
+export async function getTranscriptById(
+  id: string,
+): Promise<Transcript | undefined> {
+  // Note: Direct lookup by transcript ID. Assumes ID is sufficient context.
+  try {
+    const result = await db.select().from(transcript).where(eq(transcript.id, id));
+    return result[0];
+  } catch (error) {
+    console.error('Failed to get transcript by ID:', error);
+    throw new Error('Database error retrieving transcript.');
+  }
+}
+
+// --- End EHR Query Functions ---

@@ -1,5 +1,8 @@
 import type { InferSelectModel } from 'drizzle-orm';
 import {
+  sql,
+} from 'drizzle-orm';
+import {
   pgTable,
   varchar,
   timestamp,
@@ -9,6 +12,9 @@ import {
   primaryKey,
   foreignKey,
   boolean,
+  date,
+  index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('User', {
@@ -168,3 +174,67 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// --- EHR Tables Start ---
+
+export const client = pgTable(
+  'client',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId:
+      uuid('user_id')
+        .notNull()
+        .references(() => user.id),
+    name: text('name').notNull(),
+    dateOfBirth: date('dob').notNull(), 
+    gender: text('gender').notNull().default('Prefer not to say'),
+    insuranceCompany: text('insurance_company').notNull().default(''),
+    chiefComplaint: text('chief_complaint').notNull().default(''),
+    diagnosis: text('diagnosis').array().notNull().default(sql`'{}'::text[]`), 
+    medications: text('medications').notNull().default(''),
+    treatmentGoals: text('treatment_goals').notNull().default(''),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => {
+    return {
+      // Use GIN index for array searching (specified in migration SQL)
+      diagnosisGinIdx: index('client_diagnosis_gin_idx')
+        .on(table.diagnosis), 
+    };
+  },
+);
+
+export type Client = InferSelectModel<typeof client>;
+
+export const transcript = pgTable(
+  'transcript',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    clientId:
+      uuid('client_id')
+        .notNull()
+        .references(() => client.id, { onDelete: 'cascade' }), 
+    sessionDateTime: timestamp('session_datetime', { withTimezone: true }).notNull(), 
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at')
+      .defaultNow()
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => {
+    return {
+      clientIdIdx: index('transcript_client_id_idx').on(table.clientId),
+      clientSessionUniqueIdx: uniqueIndex('transcript_client_session_unique_idx').on(
+        table.clientId,
+        table.sessionDateTime,
+      ),
+    };
+  },
+);
+
+// --- EHR Tables End ---
