@@ -7,6 +7,7 @@ import type { Transcript } from '@/lib/db/types'; // Import from types
 import Link from 'next/link';
 import ClientEditForm from './ClientEditForm'; // Import without extension
 import TranscriptSection from '@/components/transcript-section'; // Import our new component
+import GenerateSoapNoteButton from '@/components/generate-soap-note-button'; // Import SOAP note button
 import { Metadata } from 'next';
 
 interface ClientDetailPageProps {
@@ -80,6 +81,12 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="bg-white shadow overflow-hidden sm:rounded-lg p-6 mb-6">
+        <div className="flex justify-between items-start mb-4">
+          <h2 className="text-2xl font-semibold">{client.name}</h2>
+          <div className="flex space-x-2">
+            <GenerateSoapNoteButton clientId={client.id} clientName={client.name} />
+          </div>
+        </div>
         {/* Pass the full client object */}
         <ClientEditForm client={client} />
       </div>
