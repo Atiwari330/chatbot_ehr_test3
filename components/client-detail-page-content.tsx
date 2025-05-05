@@ -1,13 +1,22 @@
 // components/client-detail-page-content.tsx
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { format } from 'date-fns'; // Date formatting utility
-import { type Client, type Transcript } from '@/lib/db/schema';
+import { type Client, type Transcript } from '@/lib/db/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
+import AddTranscriptForm from './add-transcript-form';
 
 interface ClientDetailPageContentProps {
   client: Client;
@@ -41,6 +50,14 @@ export default function ClientDetailPageContent({
   client,
   transcripts,
 }: ClientDetailPageContentProps) {
+  // State to control the visibility of the Sheet component
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  // Callback function to close the sheet on successful form submission
+  const handleFormSuccess = () => {
+    setIsSheetOpen(false);
+  };
+  
   return (
     <div className="flex flex-col h-full p-4 md:p-6 lg:p-8 space-y-6 max-w-4xl mx-auto">
       {/* Client Details Card */}
@@ -98,8 +115,28 @@ export default function ClientDetailPageContent({
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xl font-semibold">Session Transcripts</CardTitle>
-          {/* TODO: Replace with DialogTrigger for adding transcript */}
-          <Button variant="outline" size="sm" disabled>Add Transcript (soon)</Button>
+          {/* Add Transcript Button using Sheet */}
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetTrigger asChild>
+              {/* This button opens the Sheet */}
+              <Button variant="outline" size="sm">Add Transcript</Button>
+            </SheetTrigger>
+            <SheetContent className="sm:max-w-[550px] overflow-y-auto"> {/* Adjust width and add scroll */}
+              <SheetHeader>
+                <SheetTitle>Add New Session Transcript</SheetTitle>
+                <SheetDescription>
+                  Enter the session details and transcript content for {client.name}. Click 'Add Transcript' when done.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="py-4">
+                {/* Render the form inside the Sheet */}
+                <AddTranscriptForm
+                  clientId={client.id}
+                  onFormSuccess={handleFormSuccess} // Pass the callback here
+                />
+              </div>
+            </SheetContent>
+          </Sheet>
         </CardHeader>
         <CardContent>
           {transcripts.length === 0 ? (
@@ -109,12 +146,16 @@ export default function ClientDetailPageContent({
               {transcripts.map((transcript) => (
                 <li
                   key={transcript.id}
-                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-md"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-md hover:bg-muted/50 transition-colors"
                 >
-                  <span className="mb-2 sm:mb-0">
-                    Session Date: {formatDateTime(transcript.sessionDateTime)}
-                  </span>
-                  {/* Link to generate progress note (chat interface) */}
+                  <div className="flex-1 mb-2 sm:mb-0 mr-4">
+                     <p className="text-sm font-medium">
+                        Session: {formatDateTime(transcript.sessionDateTime)}
+                     </p>
+                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {transcript.content}
+                     </p>
+                  </div>
                   <Button asChild variant="secondary" size="sm">
                     <Link href={`/clients/${client.id}/chat/${transcript.id}`}>
                       Generate Progress Note
@@ -124,6 +165,7 @@ export default function ClientDetailPageContent({
               ))}
             </ul>
           )}
+          {/* Future Enhancement: Add pagination controls here if transcript list becomes long */}
         </CardContent>
       </Card>
     </div>

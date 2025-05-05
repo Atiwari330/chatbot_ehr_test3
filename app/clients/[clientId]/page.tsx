@@ -5,7 +5,8 @@ import { notFound, redirect } from 'next/navigation';
 import { type Client } from '@/lib/db/schema'; // Fix import
 import type { Transcript } from '@/lib/db/types'; // Import from types
 import Link from 'next/link';
-import ClientEditForm from './ClientEditForm'; // Import the new ClientEditForm component
+import ClientEditForm from './ClientEditForm'; // Import without extension
+import TranscriptSection from '@/components/transcript-section'; // Import our new component
 import { Metadata } from 'next';
 
 interface ClientDetailPageProps {
@@ -83,34 +84,12 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
         <ClientEditForm client={client} />
       </div>
 
-      {/* Transcripts section */}
-      <div className="mt-8 bg-white shadow overflow-hidden sm:rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Session Transcripts</h2>
-        {transcripts.length > 0 ? (
-          <ul className="divide-y divide-gray-200">
-            {transcripts.map((transcript) => (
-              <li key={transcript.id} className="py-4">
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-gray-900">
-                    {new Date(transcript.sessionDateTime).toLocaleString()}
-                  </span>
-                  <Link 
-                    href={`/clients/${params.clientId}/transcripts/${transcript.id}`}
-                    className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                  >
-                    View Details
-                  </Link>
-                </div>
-                <p className="mt-2 text-sm text-gray-500 line-clamp-2">
-                  {transcript.content.substring(0, 150)}...
-                </p>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-gray-500">No session transcripts available.</p>
-        )}
-      </div>
+      {/* Use our new TranscriptSection component */}
+      <TranscriptSection 
+        clientId={client.id} 
+        transcripts={transcripts} 
+        clientName={client.name}
+      />
 
       {/* Navigation */}
       <div className="mt-6">
